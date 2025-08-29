@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NYSC Data Flow Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; border-radius: 5px; }
+        .field { margin: 5px 0; }
+        .label { font-weight: bold; }
+        .value { color: #666; }
+        .missing { color: red; }
+        .present { color: green; }
+    </style>
+</head>
+<body>
+    <h1>NYSC Update Data Flow Test</h1>
+    
+    <div class="section">
+        <h2>Expected Fields from Confirm Page</h2>
+        <div id="expectedFields"></div>
+    </div>
+    
+    <div class="section">
+        <h2>LocalStorage Data (from Confirm Page)</h2>
+        <div id="localStorageData"></div>
+    </div>
+    
+    <div class="section">
+        <h2>Mapped Data (for Backend Submission)</h2>
+        <div id="mappedData"></div>
+    </div>
+    
+    <div class="section">
+        <h2>Backend Validation Requirements</h2>
+        <div id="backendRequirements"></div>
+    </div>
+
+    <script>
+        // Expected fields from confirm page
+        const expectedFields = [
+            'fname', 'lname', 'mname', 'gender', 'dob', 'marital_status',
+            'phone', 'username', 'address', 'state', 'lga', 'religion',
+            'matric_no', 'department', 'level', 'graduation_year', 'cgpa',
+            'jamb_no', 'study_mode'
+        ];
+
+        // Backend validation requirements
+        const backendRequiredFields = [
+            'fname', 'lname', 'gender', 'dob', 'marital_status', 'phone',
+            'email', 'address', 'state', 'lga', 'matric_no', 'department',
+            'graduation_year', 'cgpa', 'jamb_no', 'study_mode'
+        ];
+
+        function displayExpectedFields() {
+            const container = document.getElementById('expectedFields');
+            expectedFields.forEach(field => {
+                const div = document.createElement('div');
+                div.className = 'field';
+                div.innerHTML = `<span class="label">${field}:</span> <span class="value">Expected from form</span>`;
+                container.appendChild(div);
+            });
+        }
+
+        function displayLocalStorageData() {
+            const container = document.getElementById('localStorageData');
+            const storedData = localStorage.getItem('nysc_form_data');
+            
+            if (storedData) {
+                try {
+                    const formData = JSON.parse(storedData);
+                    Object.keys(formData).forEach(key => {
+                        const div = document.createElement('div');
+                        div.className = 'field';
+                        const value = formData[key] || 'Empty';
+                        div.innerHTML = `<span class="label">${key}:</span> <span class="value">${value}</span>`;
+                        container.appendChild(div);
+                    });
+                } catch (e) {
+                    container.innerHTML = '<div class="missing">Error parsing localStorage data</div>';
+                }
+            } else {
+                container.innerHTML = '<div class="missing">No data found in localStorage</div>';
+            }
+        }
+
+        function displayMappedData() {
+            const container = document.getElementById('mappedData');
+            const storedData = localStorage.getItem('nysc_form_data');
+            
+            if (storedData) {
+                try {
+                    const formData = JSON.parse(storedData);
+                    
+                    // Simulate the mapping logic from payment page
+                    const mappedData = {
+                        fname: formData.fname || formData.firstName || '',
+                        lname: formData.lname || formData.lastName || formData.surname || '',
+                        mname: formData.mname || formData.middleName || '',
+                        gender: formData.gender || '',
+                        dob: formData.dob || '',
+                        marital_status: formData.marital_status || '',
+                        phone: formData.phone || formData.phoneNumber || '',
+                        email: formData.username || formData.email || '',
+                        username: formData.username || '',
+                        address: formData.address || '',
+                        state: formData.state || '',
+                        lga: formData.lga || '',
+                        religion: formData.religion || '',
+                        matric_no: formData.matric_no || '',
+                        department: formData.department || '',
+                        level: formData.level || '',
+                        graduation_year: formData.graduation_year || '',
+                        cgpa: formData.cgpa || '',
+                        jamb_no: formData.jamb_no || '',
+                        study_mode: formData.study_mode || ''
+                    };
+                    
+                    Object.keys(mappedData).forEach(key => {
+                        const div = document.createElement('div');
+                        div.className = 'field';
+                        const value = mappedData[key] || 'Empty';
+                        const className = value === 'Empty' ? 'missing' : 'present';
+                        div.innerHTML = `<span class="label">${key}:</span> <span class="${className}">${value}</span>`;
+                        container.appendChild(div);
+                    });
+                } catch (e) {
+                    container.innerHTML = '<div class="missing">Error processing data</div>';
+                }
+            } else {
+                container.innerHTML = '<div class="missing">No data to map</div>';
+            }
+        }
+
+        function displayBackendRequirements() {
+            const container = document.getElementById('backendRequirements');
+            const storedData = localStorage.getItem('nysc_form_data');
+            
+            if (storedData) {
+                try {
+                    const formData = JSON.parse(storedData);
+                    
+                    backendRequiredFields.forEach(field => {
+                        const div = document.createElement('div');
+                        div.className = 'field';
+                        
+                        let hasValue = false;
+                        if (field === 'email') {
+                            hasValue = !!(formData.username || formData.email);
+                        } else {
+                            hasValue = !!(formData[field]);
+                        }
+                        
+                        const className = hasValue ? 'present' : 'missing';
+                        const status = hasValue ? '✓ Present' : '✗ Missing';
+                        div.innerHTML = `<span class="label">${field}:</span> <span class="${className}">${status}</span>`;
+                        container.appendChild(div);
+                    });
+                } catch (e) {
+                    container.innerHTML = '<div class="missing">Error checking requirements</div>';
+                }
+            } else {
+                container.innerHTML = '<div class="missing">No data to validate</div>';
+            }
+        }
+
+        // Initialize the page
+        displayExpectedFields();
+        displayLocalStorageData();
+        displayMappedData();
+        displayBackendRequirements();
+
+        // Auto-refresh every 5 seconds to catch localStorage changes
+        setInterval(() => {
+            document.getElementById('localStorageData').innerHTML = '';
+            document.getElementById('mappedData').innerHTML = '';
+            document.getElementById('backendRequirements').innerHTML = '';
+            displayLocalStorageData();
+            displayMappedData();
+            displayBackendRequirements();
+        }, 5000);
+    </script>
+</body>
+</html>

@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug localStorage</title>
+</head>
+<body>
+    <h1>Debug localStorage Data</h1>
+    <div id="output"></div>
+    
+    <script>
+        // Check if there's nysc_form_data in localStorage
+        const formData = localStorage.getItem('nysc_form_data');
+        const output = document.getElementById('output');
+        
+        if (formData) {
+            try {
+                const parsed = JSON.parse(formData);
+                output.innerHTML = '<h2>Found nysc_form_data:</h2><pre>' + JSON.stringify(parsed, null, 2) + '</pre>';
+            } catch (e) {
+                output.innerHTML = '<h2>Error parsing data:</h2><p>' + e.message + '</p>';
+            }
+        } else {
+            output.innerHTML = '<h2>No nysc_form_data found in localStorage</h2>';
+        }
+        
+        // Also show all localStorage keys
+        const allKeys = Object.keys(localStorage);
+        output.innerHTML += '<h2>All localStorage keys:</h2><ul>';
+        allKeys.forEach(key => {
+            output.innerHTML += '<li>' + key + '</li>';
+        });
+        output.innerHTML += '</ul>';
+    </script>
+</body>
+</html>
