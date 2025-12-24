@@ -30,15 +30,15 @@ class NyscAdminController extends Controller
             }])
             ->orderBy('created_at', 'desc')
             ->get();
-        
+
         // Get temp submissions count
         $tempSubmissions = \App\Models\NyscTempSubmission::where('status', 'pending')->count();
-        
+
         // Basic statistics
         $totalStudents = $students->count();
         $totalPaid = $students->where('is_paid', true)->count();
         $totalUnpaid = $totalStudents - $totalPaid;
-        
+
         // Department breakdown
         $departmentStats = $students->groupBy('department')
             ->map(function ($group, $department) use ($totalStudents) {
@@ -49,7 +49,7 @@ class NyscAdminController extends Controller
                     'percentage' => $totalStudents > 0 ? round(($count / $totalStudents) * 100, 1) : 0
                 ];
             })->values();
-        
+
         // Gender breakdown
         $genderStats = $students->groupBy('gender')
             ->map(function ($group, $gender) use ($totalStudents) {
@@ -60,29 +60,29 @@ class NyscAdminController extends Controller
                     'percentage' => $totalStudents > 0 ? round(($count / $totalStudents) * 100, 1) : 0
                 ];
             })->values();
-        
+
         // Payment analytics
         $allPayments = \App\Models\NyscPayment::where('status', 'successful')->get();
         $totalRevenue = $allPayments->sum('amount');
         $averageAmount = $allPayments->count() > 0 ? $allPayments->avg('amount') : 0;
         $successRate = $totalStudents > 0 ? round(($totalPaid / $totalStudents) * 100, 1) : 0;
-        
+
         // Monthly payment trends (last 7 months)
         $monthlyTrends = [];
         for ($i = 6; $i >= 0; $i--) {
             $date = now()->subMonths($i);
             $monthPayments = $allPayments->filter(function($payment) use ($date) {
-                return $payment->payment_date && 
+                return $payment->payment_date &&
                        $payment->payment_date->format('Y-m') === $date->format('Y-m');
             });
-            
+
             $monthlyTrends[] = [
                 'month' => $date->format('M'),
                 'revenue' => $monthPayments->sum('amount'),
                 'count' => $monthPayments->count()
             ];
         }
-        
+
         // Recent registrations (last 10)
         $recentRegistrations = $students->take(10)->map(function($student) {
             return [
@@ -94,7 +94,7 @@ class NyscAdminController extends Controller
                 'created_at' => $student->created_at
             ];
         });
-        
+
         return response()->json([
             'totalStudents' => $totalStudents,
             'confirmedData' => $totalStudents,
@@ -114,7 +114,7 @@ class NyscAdminController extends Controller
             'system_status' => $this->getSystemStatus(),
         ]);
     }
-    
+
     /**
      * Get system control settings
      *
@@ -126,7 +126,7 @@ class NyscAdminController extends Controller
             'system_status' => $this->getSystemStatus(),
         ]);
     }
-    
+
     /**
      * Control the update window
      *
@@ -139,17 +139,17 @@ class NyscAdminController extends Controller
             'open' => 'required|boolean',
             'deadline' => 'required|date',
         ]);
-        
+
         // Store settings in cache
         Cache::put('nysc.system_open', $request->open, now()->addYears(1));
         Cache::put('nysc.payment_deadline', $request->deadline, now()->addYears(1));
-        
+
         return response()->json([
             'message' => 'System settings updated successfully.',
             'system_status' => $this->getSystemStatus(),
         ]);
     }
-    
+
     /**
      * Update a student's NYSC record
      *
@@ -160,13 +160,13 @@ class NyscAdminController extends Controller
     public function updateStudent(Request $request, $studentId): \Illuminate\Http\JsonResponse
     {
         $nysc = Studentnysc::where('student_id', $studentId)->first();
-        
+
         if (!$nysc) {
             return response()->json([
                 'message' => 'Student record not found.',
             ], 404);
         }
-        
+
         // Validate the request
         $validated = $request->validate([
             'fname' => 'sometimes|string|max:100',
@@ -195,16 +195,16 @@ class NyscAdminController extends Controller
             'is_paid' => 'sometimes|boolean',
             'payment_amount' => 'sometimes|integer',
         ]);
-        
+
         // Update the record
         $nysc->update($validated);
-        
+
         return response()->json([
             'message' => 'Student record updated successfully.',
             'data' => $nysc,
         ]);
     }
-    
+
     /**
      * Export student data
      *
@@ -218,7 +218,7 @@ class NyscAdminController extends Controller
                 $query->where('status', 'successful')->orderBy('payment_date', 'desc');
             }])
             ->get();
-        
+
         // Transform data to include payment information
         $students = $students->map(function($student) {
             $latestPayment = $student->payments->first();
@@ -226,7 +226,7 @@ class NyscAdminController extends Controller
             $student->payment_date = $latestPayment ? $latestPayment->payment_date : null;
             return $student;
         });
-        
+
         switch ($format) {
             case 'excel':
                 return $this->exportExcel($students);
@@ -240,7 +240,7 @@ class NyscAdminController extends Controller
                 ], 400);
         }
     }
-    
+
     /**
      * Get payment data
      *
@@ -255,7 +255,7 @@ class NyscAdminController extends Controller
             ->map(function($payment) {
                 $studentNysc = $payment->studentNysc;
                 $student = $studentNysc ? $studentNysc->student : null;
-                
+
                 return [
                     'id' => $payment->id,
                     'student_id' => $payment->student_id,
@@ -272,13 +272,13 @@ class NyscAdminController extends Controller
                     'updated_at' => $payment->updated_at,
                 ];
             });
-        
+
         // Calculate statistics from actual payment records
         $allPayments = \App\Models\NyscPayment::where('status', 'successful')->get();
         $totalAmount = $allPayments->sum('amount');
         $standardFeeCount = $allPayments->where('amount', 500)->count();
         $lateFeeCount = $allPayments->where('amount', 10000)->count();
-        
+
         return response()->json([
             'payments' => $payments,
             'total' => $payments->count(),
@@ -289,7 +289,7 @@ class NyscAdminController extends Controller
             ],
         ]);
     }
-    
+
     /**
      * Get system status
      *
@@ -299,7 +299,7 @@ class NyscAdminController extends Controller
     {
         $isOpen = Cache::get('nysc.system_open', true);
         $deadline = Cache::get('nysc.payment_deadline', now()->addDays(30));
-        
+
         return [
             'is_open' => $isOpen,
             'deadline' => $deadline,
@@ -307,7 +307,7 @@ class NyscAdminController extends Controller
             'current_fee' => now()->gt($deadline) ? 10000 : 500,
         ];
     }
-    
+
     /**
      * Export data as Excel
      *
@@ -323,7 +323,7 @@ class NyscAdminController extends Controller
             'data' => $students,
         ]);
     }
-    
+
     /**
      * Export data as CSV
      *
@@ -336,10 +336,10 @@ class NyscAdminController extends Controller
             'Content-Type' => 'text/csv',
             'Content-Disposition' => 'attachment; filename="nysc-students.csv"',
         ];
-        
+
         $callback = function() use ($students) {
             $file = fopen('php://output', 'w');
-            
+
             // Add headers
             fputcsv($file, [
                 'ID', 'First Name', 'Middle Name', 'Last Name', 'Matric No', 'JAMB No', 'Study Mode', 'Gender', 'Date of Birth',
@@ -347,7 +347,7 @@ class NyscAdminController extends Controller
                 'LGA', 'Course of Study', 'Department', 'Faculty', 'Graduation Year',
                 'CGPA', 'Payment Status', 'Payment Amount', 'Payment Date'
             ]);
-            
+
             // Add data
             foreach ($students as $student) {
                 fputcsv($file, [
@@ -376,13 +376,13 @@ class NyscAdminController extends Controller
                     $student->payment_date,
                 ]);
             }
-            
+
             fclose($file);
         };
-        
+
         return Response::stream($callback, 200, $headers);
     }
-    
+
     /**
      * Export data as PDF
      *
@@ -398,7 +398,7 @@ class NyscAdminController extends Controller
             'data' => $students,
         ]);
     }
-    
+
     /**
      * Get students list with pagination and filters
      *
@@ -408,7 +408,7 @@ class NyscAdminController extends Controller
     public function getStudents(Request $request): \Illuminate\Http\JsonResponse
     {
         $query = Studentnysc::where('is_submitted', true)->with('student');
-        
+
         // Apply search filter
         if ($request->has('search') && $request->search) {
             $search = $request->search;
@@ -419,24 +419,24 @@ class NyscAdminController extends Controller
                   ->orWhere('email', 'like', "%{$search}%");
             });
         }
-        
+
         // Apply payment status filter
         if ($request->has('payment_status') && $request->payment_status !== 'all') {
             $query->where('is_paid', $request->payment_status === 'paid');
         }
-        
+
         // Apply sorting
         $sortBy = $request->get('sort_by', 'created_at');
         $sortOrder = $request->get('sort_order', 'desc');
         $query->orderBy($sortBy, $sortOrder);
-        
+
         // Paginate results
         $perPage = $request->get('per_page', 15);
         $students = $query->paginate($perPage);
-        
+
         return response()->json($students);
     }
-    
+
     /**
      * Get system settings
      *
@@ -453,10 +453,10 @@ class NyscAdminController extends Controller
             'contact_email' => Cache::get('nysc.contact_email', 'admin@nysc.gov.ng'),
             'contact_phone' => Cache::get('nysc.contact_phone', '+234-800-NYSC'),
         ];
-        
+
         return response()->json(['settings' => $settings]);
     }
-    
+
     /**
      * Update system settings
      *
@@ -474,18 +474,18 @@ class NyscAdminController extends Controller
             'contact_email' => 'sometimes|email',
             'contact_phone' => 'sometimes|string|max:20',
         ]);
-        
+
         // Store settings in cache
         foreach ($validated as $key => $value) {
             Cache::put('nysc.' . $key, $value, now()->addYears(1));
         }
-        
+
         return response()->json([
             'message' => 'System settings updated successfully.',
             'settings' => $validated,
         ]);
     }
-    
+
     /**
      * Get email settings
      *
@@ -501,10 +501,10 @@ class NyscAdminController extends Controller
             'from_email' => Cache::get('nysc.from_email', ''),
             'from_name' => Cache::get('nysc.from_name', 'NYSC Portal'),
         ];
-        
+
         return response()->json(['settings' => $settings]);
     }
-    
+
     /**
      * Update email settings
      *
@@ -522,14 +522,14 @@ class NyscAdminController extends Controller
             'from_email' => 'sometimes|email',
             'from_name' => 'sometimes|string|max:255',
         ]);
-        
+
         // Store settings in cache (except password for security)
         foreach ($validated as $key => $value) {
             if ($key !== 'smtp_password') {
                 Cache::put('nysc.' . $key, $value, now()->addYears(1));
             }
         }
-        
+
         return response()->json([
             'message' => 'Email settings updated successfully.',
         ]);
@@ -564,7 +564,7 @@ class NyscAdminController extends Controller
 
                 while (($data = fgetcsv($handle)) !== FALSE) {
                     $rowNumber++;
-                    
+
                     try {
                         // Map CSV columns to database fields
                         $studentData = [
@@ -649,21 +649,21 @@ class NyscAdminController extends Controller
 
         $callback = function() {
             $file = fopen('php://output', 'w');
-            
+
             // Add headers
             fputcsv($file, [
                 'First Name', 'Last Name', 'Middle Name', 'Matric Number', 'Email', 'Phone',
                 'Gender', 'Date of Birth (YYYY-MM-DD)', 'State of Origin', 'LGA',
                 'Course of Study', 'Department', 'Graduation Year', 'CGPA', 'JAMB Number', 'Study Mode'
             ]);
-            
+
             // Add sample data
             fputcsv($file, [
                 'John', 'Doe', 'Smith', 'VUG/CSC/16/1001', 'john.doe@example.com', '08012345678',
                 'Male', '1995-05-15', 'Lagos', 'Ikeja', 'Computer Science', 'Computer Science',
                 '2020', '3.50', 'JAM123456789', 'full-time'
             ]);
-            
+
             fclose($file);
         };
 
@@ -679,7 +679,7 @@ class NyscAdminController extends Controller
     {
         try {
             Cache::flush();
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Cache cleared successfully'
@@ -702,11 +702,11 @@ class NyscAdminController extends Controller
     {
         try {
             // Send test email
-            $testEmail = Cache::get('nysc.contact_email', 'admin@nysc.gov.ng');
-            
+            $testEmail = Cache::get('nysc.contact_email', 'onoyimab@veritas.edu.ng');
+
             // Here you would implement actual email sending logic
             // For now, we'll just return a success response
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Test email sent successfully to ' . $testEmail
@@ -719,34 +719,11 @@ class NyscAdminController extends Controller
             ], 500);
         }
     }
-    
-    /**
-     * Test email configuration
-     *
-     * @return \Illuminate\Http\JsonResponse
-     */
-    public function testEmail(): \Illuminate\Http\JsonResponse
-    {
-        // In a real application, you would send a test email
-        return response()->json([
-            'message' => 'Test email sent successfully.',
-        ]);
-    }
-    
-    /**
-     * Clear system cache
-     *
-     * @return \Illuminate\Http\JsonResponse
-     */
-    public function clearCache(): \Illuminate\Http\JsonResponse
-    {
-        Cache::flush();
-        
-        return response()->json([
-            'message' => 'System cache cleared successfully.',
-        ]);
-    }
-    
+
+
+
+
+
     /**
      * Get all students with their NYSC data
      *
@@ -784,7 +761,7 @@ class NyscAdminController extends Controller
                     'updated_at' => $nysc->updated_at,
                 ];
             });
-            
+
             return response()->json([
                 'success' => true,
                 'data' => $students,
@@ -886,16 +863,16 @@ class NyscAdminController extends Controller
         try {
             $page = $request->get('page', 1);
             $limit = $request->get('limit', 10);
-            
+
             // Get temporary submissions with student information
             $submissions = \App\Models\NyscTempSubmission::with(['student'])
                 ->orderBy('created_at', 'desc')
                 ->paginate($limit, ['*'], 'page', $page);
-            
+
             $formattedSubmissions = $submissions->map(function($submission) {
                 $student = $submission->student;
                 $formData = json_decode($submission->form_data, true) ?? [];
-                
+
                 return [
                     'id' => $submission->id,
                     'student_id' => $submission->student_id,
@@ -916,7 +893,7 @@ class NyscAdminController extends Controller
                     'updated_at' => $submission->updated_at,
                 ];
             });
-            
+
             return response()->json([
                 'success' => true,
                 'submissions' => $formattedSubmissions,
@@ -944,10 +921,10 @@ class NyscAdminController extends Controller
         try {
             $submission = \App\Models\NyscTempSubmission::with(['student'])
                 ->findOrFail($submissionId);
-            
+
             $student = $submission->student;
             $formData = json_decode($submission->form_data, true) ?? [];
-            
+
             $submissionDetails = [
                 'id' => $submission->id,
                 'student_id' => $submission->student_id,
@@ -967,7 +944,7 @@ class NyscAdminController extends Controller
                 'created_at' => $submission->created_at,
                 'updated_at' => $submission->updated_at,
             ];
-            
+
             return response()->json([
                 'success' => true,
                 'submission' => $submissionDetails
@@ -992,14 +969,14 @@ class NyscAdminController extends Controller
     {
         try {
             $submission = \App\Models\NyscTempSubmission::findOrFail($submissionId);
-            
+
             $submission->update([
                 'status' => $request->status,
                 'review_notes' => $request->notes,
                 'reviewed_by' => auth()->id(),
                 'reviewed_at' => now(),
             ]);
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Submission status updated successfully'
@@ -1025,10 +1002,10 @@ class NyscAdminController extends Controller
             $type = $request->input('type'); // student_nysc, payments, submissions
             $format = $request->input('format'); // csv, excel, pdf
             $filters = $request->input('filters', []);
-            
+
             // Generate unique job ID
             $jobId = uniqid('export_', true);
-            
+
             // Store job in cache with initial status
             $jobData = [
                 'id' => $jobId,
@@ -1039,30 +1016,30 @@ class NyscAdminController extends Controller
                 'progress' => 0,
                 'created_at' => now()->toISOString(),
             ];
-            
+
             Cache::put("export_job_{$jobId}", $jobData, 3600); // 1 hour
-            
+
             // Track job keys
             $cacheKeys = Cache::get('export_job_keys', []);
             $cacheKeys[] = "export_job_{$jobId}";
             Cache::put('export_job_keys', $cacheKeys, 3600);
-            
+
             // Process export based on type
             $data = $this->getExportData($type, $filters);
             $recordCount = count($data);
-            
+
             // Generate file
             $fileName = $this->generateExportFile($data, $type, $format, $jobId);
-            
+
             // Update job status
             $jobData['status'] = 'completed';
             $jobData['progress'] = 100;
             $jobData['record_count'] = $recordCount;
             $jobData['file_name'] = $fileName;
             $jobData['download_url'] = "/api/nysc/admin/export-jobs/{$jobId}/download";
-            
+
             Cache::put("export_job_{$jobId}", $jobData, 3600);
-            
+
             return response()->json([
                 'success' => true,
                 'job_id' => $jobId,
@@ -1088,19 +1065,19 @@ class NyscAdminController extends Controller
             // Get all export jobs from cache
             $jobs = [];
             $cacheKeys = Cache::get('export_job_keys', []);
-            
+
             foreach ($cacheKeys as $key) {
                 $job = Cache::get($key);
                 if ($job) {
                     $jobs[] = $job;
                 }
             }
-            
+
             // Sort by created_at desc
             usort($jobs, function($a, $b) {
                 return strtotime($b['created_at']) - strtotime($a['created_at']);
             });
-            
+
             return response()->json([
                 'success' => true,
                 'jobs' => $jobs
@@ -1124,14 +1101,14 @@ class NyscAdminController extends Controller
     {
         try {
             $job = Cache::get("export_job_{$jobId}");
-            
+
             if (!$job) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Export job not found'
                 ], 404);
             }
-            
+
             return response()->json([
                 'success' => true,
                 'job' => $job
@@ -1155,17 +1132,17 @@ class NyscAdminController extends Controller
     {
         try {
             $job = Cache::get("export_job_{$jobId}");
-            
+
             if (!$job || $job['status'] !== 'completed') {
                 return response()->json(['error' => 'Export job not found or not completed'], 404);
             }
-            
+
             $filePath = storage_path("app/exports/{$job['file_name']}");
-            
+
             if (!file_exists($filePath)) {
                 return response()->json(['error' => 'Export file not found'], 404);
             }
-            
+
             return response()->download($filePath);
         } catch (\Exception $e) {
             return response()->json(['error' => 'Failed to download file'], 500);
@@ -1202,20 +1179,20 @@ class NyscAdminController extends Controller
     private function getStudentNyscExportData(array $filters): array
     {
         $query = Studentnysc::with(['student', 'payments']);
-        
+
         // Apply filters
         if (!empty($filters['department'])) {
             $query->where('department', $filters['department']);
         }
-        
+
         if (!empty($filters['gender'])) {
             $query->where('gender', $filters['gender']);
         }
-        
+
         if (!empty($filters['state'])) {
             $query->where('state_of_origin', $filters['state']);
         }
-        
+
         if (!empty($filters['paymentStatus'])) {
             if ($filters['paymentStatus'] === 'paid') {
                 $query->where('is_paid', true);
@@ -1223,15 +1200,15 @@ class NyscAdminController extends Controller
                 $query->where('is_paid', false);
             }
         }
-        
+
         if (!empty($filters['matricNumbers'])) {
             $query->whereIn('matric_no', $filters['matricNumbers']);
         }
-        
+
         if (!empty($filters['dateRange']['start']) && !empty($filters['dateRange']['end'])) {
             $query->whereBetween('created_at', [$filters['dateRange']['start'], $filters['dateRange']['end']]);
         }
-        
+
         return $query->get()->map(function($student) {
             $latestPayment = $student->payments->first();
             return [
@@ -1268,26 +1245,26 @@ class NyscAdminController extends Controller
     private function getPaymentsExportData(array $filters): array
     {
         $query = NyscPayment::with(['studentNysc.student']);
-        
+
         // Apply filters
         if (!empty($filters['department'])) {
             $query->whereHas('studentNysc', function($q) use ($filters) {
                 $q->where('department', $filters['department']);
             });
         }
-        
+
         if (!empty($filters['paymentStatus'])) {
             $query->where('status', $filters['paymentStatus']);
         }
-        
+
         if (!empty($filters['dateRange']['start']) && !empty($filters['dateRange']['end'])) {
             $query->whereBetween('payment_date', [$filters['dateRange']['start'], $filters['dateRange']['end']]);
         }
-        
+
         return $query->get()->map(function($payment) {
             $studentNysc = $payment->studentNysc;
             $student = $studentNysc ? $studentNysc->student : null;
-            
+
             return [
                 'Payment ID' => $payment->id,
                 'Student ID' => $payment->student_id,
@@ -1314,20 +1291,20 @@ class NyscAdminController extends Controller
     private function getSubmissionsExportData(array $filters): array
     {
         $query = NyscTempSubmission::with(['student']);
-        
+
         // Apply filters
         if (!empty($filters['department'])) {
             $query->whereJsonContains('form_data->department', $filters['department']);
         }
-        
+
         if (!empty($filters['dateRange']['start']) && !empty($filters['dateRange']['end'])) {
             $query->whereBetween('created_at', [$filters['dateRange']['start'], $filters['dateRange']['end']]);
         }
-        
+
         return $query->get()->map(function($submission) {
             $student = $submission->student;
             $formData = json_decode($submission->form_data, true) ?? [];
-            
+
             return [
                 'Submission ID' => $submission->id,
                 'Student ID' => $submission->student_id,
@@ -1358,12 +1335,12 @@ class NyscAdminController extends Controller
     {
         $fileName = "{$type}_{$format}_{$jobId}.{$format}";
         $filePath = storage_path("app/exports/{$fileName}");
-        
+
         // Ensure exports directory exists
         if (!file_exists(dirname($filePath))) {
             mkdir(dirname($filePath), 0755, true);
         }
-        
+
         switch ($format) {
             case 'csv':
                 $this->generateCsvFile($data, $filePath);
@@ -1377,7 +1354,7 @@ class NyscAdminController extends Controller
             default:
                 throw new \Exception('Unsupported export format');
         }
-        
+
         return $fileName;
     }
 
@@ -1390,17 +1367,17 @@ class NyscAdminController extends Controller
     private function generateCsvFile(array $data, string $filePath): void
     {
         $file = fopen($filePath, 'w');
-        
+
         if (!empty($data)) {
             // Write headers
             fputcsv($file, array_keys($data[0]));
-            
+
             // Write data
             foreach ($data as $row) {
                 fputcsv($file, $row);
             }
         }
-        
+
         fclose($file);
     }
 
@@ -1430,7 +1407,7 @@ class NyscAdminController extends Controller
         // In production, you would use a library like TCPDF or DomPDF
         $html = "<h1>" . ucfirst(str_replace('_', ' ', $type)) . " Export</h1>";
         $html .= "<table border='1'>";
-        
+
         if (!empty($data)) {
             // Headers
             $html .= "<tr>";
@@ -1438,7 +1415,7 @@ class NyscAdminController extends Controller
                 $html .= "<th>{$header}</th>";
             }
             $html .= "</tr>";
-            
+
             // Data
             foreach ($data as $row) {
                 $html .= "<tr>";
@@ -1448,7 +1425,7 @@ class NyscAdminController extends Controller
                 $html .= "</tr>";
             }
         }
-        
+
         $html .= "</table>";
         file_put_contents($filePath, $html);
     }
@@ -1458,7 +1435,7 @@ class NyscAdminController extends Controller
     {
         try {
             $query = Staff::query();
-            
+
             // Apply filters
             if ($request->has('search') && !empty($request->search)) {
                 $search = $request->search;
@@ -1468,21 +1445,21 @@ class NyscAdminController extends Controller
                       ->orWhere('email', 'like', "%{$search}%");
                 });
             }
-            
+
             if ($request->has('status') && !empty($request->status)) {
                 $query->where('status', $request->status);
             }
-            
+
             $adminUsers = $query->select([
-                'id', 'fname', 'lname', 'email', 'status', 
+                'id', 'fname', 'lname', 'email', 'status',
                 'created_at', 'updated_at', 'last_login_at'
             ])->get();
-            
+
             // Transform data to match frontend interface
             $transformedUsers = $adminUsers->map(function($user) {
                 // Get role based on staff ID (using the same logic as frontend)
                 $role = $this->getUserRole($user->id);
-                
+
                 return [
                     'id' => $user->id,
                     'staff_id' => (string)$user->id,
@@ -1496,12 +1473,12 @@ class NyscAdminController extends Controller
                     'updated_at' => $user->updated_at
                 ];
             });
-            
+
             return response()->json([
                 'success' => true,
                 'users' => $transformedUsers
             ]);
-            
+
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -1510,7 +1487,7 @@ class NyscAdminController extends Controller
             ], 500);
         }
     }
-    
+
     public function createAdminUser(Request $request)
     {
         try {
@@ -1522,7 +1499,7 @@ class NyscAdminController extends Controller
                 'role' => 'required|in:super_admin,admin,sub_admin,manager',
                 'status' => 'required|in:active,inactive'
             ]);
-            
+
             $user = Staff::create([
                 'fname' => $validated['fname'],
                 'lname' => $validated['lname'],
@@ -1530,11 +1507,11 @@ class NyscAdminController extends Controller
                 'password' => Hash::make($validated['password']),
                 'status' => $validated['status']
             ]);
-            
+
             // Store role information in cache for now
             // In production, this should be stored in a proper roles table
             Cache::put("user_role_{$user->id}", $validated['role'], now()->addYears(1));
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Admin user created successfully',
@@ -1550,7 +1527,7 @@ class NyscAdminController extends Controller
                     'updated_at' => $user->updated_at
                 ]
             ], 201);
-            
+
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -1559,7 +1536,7 @@ class NyscAdminController extends Controller
             ], 500);
         }
     }
-    
+
     public function updateAdminUser(Request $request, $userId)
     {
         try {
@@ -1570,7 +1547,7 @@ class NyscAdminController extends Controller
                     'message' => 'Admin user not found'
                 ], 404);
             }
-            
+
             $validated = $request->validate([
                 'fname' => 'sometimes|required|string|max:255',
                 'lname' => 'sometimes|required|string|max:255',
@@ -1579,26 +1556,26 @@ class NyscAdminController extends Controller
                 'role' => 'sometimes|required|in:super_admin,admin,sub_admin,manager',
                 'status' => 'sometimes|required|in:active,inactive'
             ]);
-            
+
             // Update user fields
             if (isset($validated['fname'])) $user->fname = $validated['fname'];
             if (isset($validated['lname'])) $user->lname = $validated['lname'];
             if (isset($validated['email'])) $user->email = $validated['email'];
             if (isset($validated['status'])) $user->status = $validated['status'];
-            
+
             if (!empty($validated['password'])) {
                 $user->password = Hash::make($validated['password']);
             }
-            
+
             $user->save();
-            
+
             // Update role in cache if provided
             if (isset($validated['role'])) {
                 Cache::put("user_role_{$user->id}", $validated['role'], now()->addYears(1));
             }
-            
+
             $role = $validated['role'] ?? $this->getUserRole($user->id);
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Admin user updated successfully',
@@ -1614,7 +1591,7 @@ class NyscAdminController extends Controller
                     'updated_at' => $user->updated_at
                 ]
             ]);
-            
+
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -1623,7 +1600,7 @@ class NyscAdminController extends Controller
             ], 500);
         }
     }
-    
+
     public function deleteAdminUser($userId)
     {
         try {
@@ -1634,7 +1611,7 @@ class NyscAdminController extends Controller
                     'message' => 'Admin user not found'
                 ], 404);
             }
-            
+
             // Prevent deletion of super admin
             if ($user->id == 596) {
                 return response()->json([
@@ -1642,17 +1619,17 @@ class NyscAdminController extends Controller
                     'message' => 'Cannot delete super admin user'
                 ], 403);
             }
-            
+
             $user->delete();
-            
+
             // Remove role from cache
             Cache::forget("user_role_{$userId}");
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Admin user deleted successfully'
             ]);
-            
+
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -1661,7 +1638,7 @@ class NyscAdminController extends Controller
             ], 500);
         }
     }
-    
+
     // Helper methods for role management
     private function getUserRole($staffId)
     {
@@ -1670,12 +1647,12 @@ class NyscAdminController extends Controller
         if ($cachedRole) {
             return $cachedRole;
         }
-        
+
         // Fallback to hardcoded logic (same as frontend)
         if ($staffId == 596) {
             return 'super_admin';
         }
-        
+
         if ($staffId >= 500 && $staffId < 600) {
             return 'admin';
         } else if ($staffId >= 400 && $staffId < 500) {
@@ -1684,7 +1661,7 @@ class NyscAdminController extends Controller
             return 'manager';
         }
     }
-    
+
     private function getRolePermissions($role)
     {
         $permissions = [
@@ -1745,7 +1722,7 @@ class NyscAdminController extends Controller
                 'canManageSystem' => false,
             ],
         ];
-        
+
         return $permissions[$role] ?? $permissions['manager'];
     }
 }
