@@ -7,6 +7,7 @@ use App\Models\NyscPayment;
 use App\Models\NyscTempSubmission;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -24,8 +25,8 @@ class NyscPaymentController extends Controller
     {
         $student = Auth::user();
         
-        // Validate session_id is provided
-        $sessionId = $request->input('session_id');
+        // Accept session_id or submission_token (frontend sends submission_token)
+        $sessionId = $request->input('session_id') ?? $request->input('submission_token');
         if (!$sessionId) {
             return response()->json([
                 'message' => 'Session ID is required for payment initiation.',
@@ -52,9 +53,11 @@ class NyscPaymentController extends Controller
             ], 400);
         }
         
-        // Determine fee based on deadline
-        $deadline = config('nysc.payment_deadline', now()->addDays(30));
-        $amount = now()->lt($deadline) ? 500 : 10000; // Standard: ₦500, Late: ₦10,000
+        // Determine fee based on admin-configured settings
+        $deadline = Cache::get('nysc.payment_deadline', now()->addDays(30));
+        $standardFee = Cache::get('nysc.registration_fee', 500);
+        $lateFee = Cache::get('nysc.late_fee', 10000);
+        $amount = now()->lt($deadline) ? $standardFee : $lateFee;
         
         // Generate a unique reference
         $reference = 'VUST-' . Str::random(10);
@@ -177,14 +180,40 @@ class NyscPaymentController extends Controller
                 // Find the temporary submission using session_id
                 $tempSubmission = null;
                 if ($payment->session_id) {
-                    $tempSubmission = NyscTempSubmission::where('session_id', $payment->session_id)
-                                                      ->where('status', 'pending')
-                                                      ->first();
+                    $tempSubmission = NyscTempSubmission::where('session_id', $payment->session_id)->first();
                 }
                 
                 if (!$tempSubmission) {
                     return response()->json([
-                        'message' => 'Temporary submission not found or already processed.',
+                        'message' => 'Temporary submission not found. Please confirm your details again.',
+                    ], 400);
+                }
+
+                // If temp submission is already paid, data was already submitted
+                if ($tempSubmission->status === 'paid') {
+                    $nysc = Studentnysc::where('student_id', $payment->student_id)->first();
+                    $payment->update(['status' => 'successful', 'payment_date' => $payment->payment_date ?? now()]);
+
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'Payment already verified and data submitted successfully.',
+                        'payment_details' => [
+                            'amount' => $payment->amount,
+                            'reference' => $payment->payment_reference,
+                            'date' => $payment->payment_date,
+                            'status' => 'successful',
+                        ],
+                        'nysc_record' => [
+                            'id' => $nysc->id ?? null,
+                            'is_submitted' => $nysc->is_submitted ?? true,
+                        ]
+                    ]);
+                }
+
+                // If temp submission expired, user must re-confirm
+                if ($tempSubmission->status === 'expired') {
+                    return response()->json([
+                        'message' => 'Your submission data has expired. Please go back and confirm your details again before making payment.',
                     ], 400);
                 }
                 
@@ -214,7 +243,7 @@ class NyscPaymentController extends Controller
                     ]);
                     
                     // Mark temporary submission as completed
-                    $tempSubmission->update(['status' => 'completed']);
+                    $tempSubmission->update(['status' => 'paid']);
                     
                     // Log successful submission
                     Log::info('NYSC data submitted successfully after payment', [
@@ -332,8 +361,8 @@ class NyscPaymentController extends Controller
                             'transaction_id' => $data['id'] ?? null,
                         ]);
                         
-                        // Mark temporary submission as completed
-                        $tempSubmission->update(['status' => 'completed']);
+                        // Mark temporary submission as paid
+                        $tempSubmission->update(['status' => 'paid']);
                         
                         // Commit transaction
                         DB::commit();
@@ -465,7 +494,7 @@ class NyscPaymentController extends Controller
                     'email' => $payment->studentNysc->email,
                     'phone' => $payment->studentNysc->phone,
                     'institution' => 'Benue State University', // Default institution
-                    'course_of_study' => $payment->studentNysc->department,
+                    'course_of_study' => $payment->studentNysc->course_study,
                     'year_of_graduation' => $payment->studentNysc->graduation_year,
                 ] : null,
                 'receipt_generated_at' => now(),
@@ -532,7 +561,7 @@ class NyscPaymentController extends Controller
                     'matric_no' => $studentNysc->matric_no,
                     'matric_number' => $studentNysc->matric_no,
                     'institution' => 'Veritas University Abuja',
-                    'course_of_study' => null, // Field not available in current table
+                    'course_of_study' => $studentNysc->course_study,
                     'department' => $studentNysc->department,
                     'faculty' => null, // Field not available in current table
                     'level' => $studentNysc->level,

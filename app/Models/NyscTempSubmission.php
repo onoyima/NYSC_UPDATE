@@ -14,6 +14,8 @@ class NyscTempSubmission extends Model
 
     protected $fillable = [
         'student_id',
+        'nysc_session_id',
+        'submission_token',
         'session_id',
         // Personal Information
         'fname',
@@ -31,11 +33,16 @@ class NyscTempSubmission extends Model
         // Academic Information
         'matric_no',
         'department',
+        'course_study',
         'level',
         'graduation_year',
         'cgpa',
         'jamb_no',
+        'nin',
         'study_mode',
+        // Documents
+        'nin_slip',
+        'jamb_admission_letter',
         // Status
         'status',
         'expires_at',
@@ -44,7 +51,6 @@ class NyscTempSubmission extends Model
     protected $casts = [
         'dob' => 'date',
         'cgpa' => 'decimal:2',
-        'graduation_year' => 'integer',
         'expires_at' => 'datetime',
     ];
 

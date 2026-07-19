@@ -13,6 +13,8 @@ class Studentnysc extends Model
 
     protected $fillable = [
         'student_id',
+        'nysc_session_id',
+        'submission_token',
         'is_paid',
         'is_submitted',
         'submitted_at',
@@ -31,11 +33,18 @@ class Studentnysc extends Model
         'username',
         'matric_no',
         'department',
+        'course_study',
         'level',
         'graduation_year',
         'cgpa',
+        'class_of_degree',
         'jamb_no',
+        'nin',
         'study_mode',
+        'nin_slip',
+        'jamb_admission_letter',
+        'is_military',
+        'is_status',
     ];
 
     protected $casts = [

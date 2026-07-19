@@ -65,4 +65,9 @@ class StudentAcademic extends Model
     {
         return $this->belongsTo(Department::class, 'department_id');
     }
+
+    public function courseStudy()
+    {
+        return $this->belongsTo(CourseStudy::class, 'course_study_id');
+    }
 }

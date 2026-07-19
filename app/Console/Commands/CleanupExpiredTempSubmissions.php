@@ -40,7 +40,7 @@ class CleanupExpiredTempSubmissions extends Command
                 ->get();
             
             // Find old completed/expired submissions (older than 7 days)
-            $oldSubmissions = NyscTempSubmission::whereIn('status', ['completed', 'expired'])
+            $oldSubmissions = NyscTempSubmission::whereIn('status', ['paid', 'expired'])
                 ->where('created_at', '<', Carbon::now()->subDays(7))
                 ->get();
             
@@ -76,7 +76,7 @@ class CleanupExpiredTempSubmissions extends Command
             // Delete old submissions
             $deleted = 0;
             if ($oldCount > 0) {
-                $deleted = NyscTempSubmission::whereIn('status', ['completed', 'expired'])
+                $deleted = NyscTempSubmission::whereIn('status', ['paid', 'expired'])
                     ->where('created_at', '<', Carbon::now()->subDays(7))
                     ->delete();
             }

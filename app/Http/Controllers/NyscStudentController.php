@@ -72,6 +72,7 @@ class NyscStudentController extends Controller
         'academic' => [
             'matric_no' => $handleNull($academic->matric_no ?? null),
             'department' => $handleNull($academic->department->name ?? null),
+            'course_study' => $handleNull($academic->courseStudy->name ?? null),
             'level' => $handleNull($academic->level ?? null),
             'jamb_no' => $handleNull($academic->jamb_no ?? null),
             'jambno' => $handleNull($academic->jamb_no ?? null), // Alias for jamb_no
@@ -89,9 +90,10 @@ class NyscStudentController extends Controller
             'marital_status' => $nysc->marital_status,
             'phone' => $nysc->phone,
             'username' => $nysc->email,
-            'state_of_origin' => $nysc->state_of_origin,
-            'course_of_study' => $nysc->course_of_study,
-            'jambno' => $nysc->jambno,
+            'state_of_origin' => $nysc->state,
+            'course_of_study' => $nysc->course_study,
+            'nin' => $nysc->nin,
+            'jambno' => $nysc->jamb_no,
             'study_mode' => $nysc->study_mode,
         ] : null,
         'is_submitted' => $isSubmitted,
@@ -130,7 +132,7 @@ class NyscStudentController extends Controller
             'matric_no' => 'required|string|max:50',
             'department' => 'required|string|max:255',
             'level' => 'nullable|string|max:10',
-            'graduation_year' => 'required|integer|min:2000|max:2030',
+            'graduation_year' => 'required|string|max:50',
             'cgpa' => 'required|numeric|min:0|max:5',
             'jamb_no' => 'required|string|max:20',
             'study_mode' => 'required|string|max:100',
@@ -209,15 +211,36 @@ class NyscStudentController extends Controller
             'username' => 'nullable|string|max:255',
             'matric_no' => 'required|string|max:50',
             'department' => 'required|string|max:255',
+            'course_study' => 'nullable|string|max:255',
+            'nin' => 'nullable|string|max:20',
             'level' => 'nullable|string|max:10',
-            'graduation_year' => 'required|integer|min:2000|max:2030',
+            'graduation_year' => 'required|string|max:50',
             'cgpa' => 'required|numeric|min:0|max:5',
             'jamb_no' => 'required|string|max:20',
             'study_mode' => 'required|string|max:100',
 
             // Payment details
             'payment_amount' => 'required|numeric|min:0',
+
+            // File uploads
+            'nin_slip' => 'nullable|file|max:2048',
+            'jamb_admission_letter' => 'nullable|file|max:2048',
         ]);
+
+        // Handle file uploads
+        if ($request->hasFile('nin_slip')) {
+            $file = $request->file('nin_slip');
+            $filename = 'nin_slip_' . $student->id . '_' . time() . '.' . $file->getClientOriginalExtension();
+            $file->move(public_path('uploads/nysc/documents'), $filename);
+            $validated['nin_slip'] = 'uploads/nysc/documents/' . $filename;
+        }
+
+        if ($request->hasFile('jamb_admission_letter')) {
+            $file = $request->file('jamb_admission_letter');
+            $filename = 'jamb_letter_' . $student->id . '_' . time() . '.' . $file->getClientOriginalExtension();
+            $file->move(public_path('uploads/nysc/documents'), $filename);
+            $validated['jamb_admission_letter'] = 'uploads/nysc/documents/' . $filename;
+        }
 
         // Generate unique session ID for this submission
         $sessionId = NyscTempSubmission::generateSessionId();
@@ -226,6 +249,7 @@ class NyscStudentController extends Controller
         $tempData = array_diff_key($validated, ['payment_amount' => '']);
         $tempData['student_id'] = $student->id;
         $tempData['session_id'] = $sessionId;
+        $tempData['submission_token'] = $sessionId;
         $tempData['status'] = 'pending';
         
         // Delete any existing pending submissions for this student
@@ -242,6 +266,7 @@ class NyscStudentController extends Controller
             'message' => 'Details Confirmed. You can now proceed to payment.',
             'data' => [
                 'session_id' => $sessionId,
+                'submission_token' => $sessionId,
                 'payment_amount' => $validated['payment_amount'],
                 'student_id' => $student->id,
                 'expires_at' => $tempSubmission->expires_at
@@ -380,6 +405,7 @@ class NyscStudentController extends Controller
                 'matric_no' => 'sometimes|string|max:50',
                 'matricNumber' => 'sometimes|string|max:50', // Alternative field name
                 'course_of_study' => 'sometimes|string|max:255',
+                'course_study' => 'sometimes|string|max:255',
                 'courseOfStudy' => 'sometimes|string|max:255', // Alternative field name
                 'department' => 'sometimes|string|max:255',
                 'graduation_year' => 'sometimes|integer|min:1900|max:' . (date('Y') + 10),
@@ -413,7 +439,8 @@ class NyscStudentController extends Controller
                 'phoneNumber' => 'phone',
                 'username' => 'email', // Map username to email
                 'matricNumber' => 'matric_no',
-                'courseOfStudy' => 'course_of_study',
+                'courseOfStudy' => 'course_study',
+                'course_of_study' => 'course_study',
                 'graduationYear' => 'graduation_year',
                 'jambNumber' => 'jamb_no',
                 'studyMode' => 'study_mode',
@@ -435,7 +462,7 @@ class NyscStudentController extends Controller
                              'emergency_contact_other_names', 'emergency_contact_email',
                              'blood_group', 'genotype', 'physical_condition',
                              'medical_condition', 'allergies', 'religion',
-                             'state_of_origin', 'course_of_study',
+                             'state_of_origin',
                              'emergency_contact_name', 'emergency_contact_phone',
                              'emergency_contact_relationship', 'emergency_contact_address'];
 
@@ -747,5 +774,30 @@ class NyscStudentController extends Controller
             'dataUpdates' => $dataUpdates,
             'completedUpdates' => $completedUpdates,
         ]);
+    }
+
+    /**
+     * Get available VU sessions for graduation year selection
+     */
+    public function getVuaSessions(): \Illuminate\Http\JsonResponse
+    {
+        try {
+            $sessions = \DB::table('vu_sessions')
+                ->select('id', 'session', 'start_date', 'end_date', 'status')
+                ->where('status', 1)
+                ->orderBy('id', 'desc')
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                'sessions' => $sessions,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch sessions',
+                'sessions' => [],
+            ]);
+        }
     }
 }

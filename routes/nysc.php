@@ -31,6 +31,7 @@ Route::prefix('nysc')->group(function () {
         Route::get('student/profile', [NyscStudentController::class, 'getProfile']);
         Route::get('student/study-modes', [NyscStudentController::class, 'getStudyModes']);
         Route::get('student/analytics', [NyscStudentController::class, 'getAnalytics']);
+        Route::get('vua-sessions', [NyscStudentController::class, 'getVuaSessions']);
         
         // Document management
         Route::get('student/documents', [NyscDocumentController::class, 'getDocuments']);
