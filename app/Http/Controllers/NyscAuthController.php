@@ -231,7 +231,7 @@ class NyscAuthController extends Controller
             ]);
         } elseif ($user instanceof Staff) {
             // Admin user
-            $user->load(['contacts', 'workProfiles', 'positions']);
+            $user->load(['contacts', 'workProfiles']);
 
             return response()->json([
                 'userType' => 'admin',
@@ -261,7 +261,6 @@ class NyscAuthController extends Controller
                     'status' => $user->status,
                     'contacts' => $user->contacts,
                     'work_profiles' => $user->workProfiles,
-                    'positions' => $user->positions
                 ],
             ]);
         }

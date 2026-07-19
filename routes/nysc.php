@@ -9,6 +9,9 @@ use App\Http\Controllers\NyscDocumentController;
 
 Route::prefix('nysc')->group(function () {
 
+    // ✅ Public system status (no auth required)
+    Route::get('system-status', [NyscStudentController::class, 'systemStatus']);
+
     // ✅ Unified login (student + admin)
     Route::post('login', [NyscAuthController::class, 'login']);
 
@@ -27,6 +30,7 @@ Route::prefix('nysc')->group(function () {
         Route::get('student/payment-history', [NyscStudentController::class, 'getPaymentHistory']);
         Route::get('student/profile', [NyscStudentController::class, 'getProfile']);
         Route::get('student/study-modes', [NyscStudentController::class, 'getStudyModes']);
+        Route::get('student/analytics', [NyscStudentController::class, 'getAnalytics']);
         
         // Document management
         Route::get('student/documents', [NyscDocumentController::class, 'getDocuments']);

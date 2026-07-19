@@ -14,6 +14,7 @@ use App\Models\NyscPayment;
 use App\Models\NyscTempSubmission;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 class NyscStudentController extends Controller
@@ -677,6 +678,74 @@ class NyscStudentController extends Controller
 
         return response()->json([
             'study_modes' => $studyModes,
+        ]);
+    }
+
+    /**
+     * Get public system status (no auth required)
+     *
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function systemStatus(): \Illuminate\Http\JsonResponse
+    {
+        $isOpen = Cache::get('nysc.system_open', true);
+        $deadline = Cache::get('nysc.payment_deadline', now()->addDays(30));
+        $registrationFee = Cache::get('nysc.registration_fee', 500);
+        $lateFee = Cache::get('nysc.late_fee', 10000);
+        $countdownTitle = Cache::get('nysc.countdown_title', 'Update Correct Details');
+        $countdownMessage = Cache::get('nysc.countdown_message', 'Please update your information before the deadline');
+        $activeSessionId = Cache::get('nysc.active_session_id', null);
+        $activeSessionName = Cache::get('nysc.active_session_name', null);
+
+        $isLateFee = now()->gt($deadline);
+        $currentFee = $isLateFee ? $lateFee : $registrationFee;
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'is_open' => $isOpen,
+                'deadline' => $deadline,
+                'is_late_fee' => $isLateFee,
+                'current_fee' => $currentFee,
+                'payment_amount' => $registrationFee,
+                'late_payment_fee' => $lateFee,
+                'countdown_title' => $countdownTitle,
+                'countdown_message' => $countdownMessage,
+                'active_session_id' => $activeSessionId,
+                'active_session_name' => $activeSessionName,
+            ],
+        ]);
+    }
+
+    /**
+     * Get student-specific analytics
+     *
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getAnalytics(): \Illuminate\Http\JsonResponse
+    {
+        $student = Auth::user();
+
+        // Count submissions (temp submissions for this student)
+        $submissionCount = NyscTempSubmission::where('student_id', $student->id)->count();
+
+        // Count total successful payments
+        $totalPayments = NyscPayment::where('student_id', $student->id)
+            ->where('status', 'successful')
+            ->count();
+
+        // Count data updates (NYSC record updates)
+        $nyscRecord = Studentnysc::where('student_id', $student->id)->first();
+        $dataUpdates = $nyscRecord ? 1 : 0;
+
+        // Completed updates (submitted)
+        $completedUpdates = $nyscRecord && $nyscRecord->is_submitted ? 1 : 0;
+
+        return response()->json([
+            'submissionCount' => $submissionCount,
+            'totalPayments' => $totalPayments,
+            'dataUpdates' => $dataUpdates,
+            'completedUpdates' => $completedUpdates,
         ]);
     }
 }
